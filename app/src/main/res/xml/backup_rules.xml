@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Keys live in EncryptedSharedPreferences (device-bound keystore).
+         MasterKey can't survive a backup restore on a different device,
+         so exclude the prefs file entirely instead of shipping a brick. -->
+    <exclude domain="sharedpref" path="chordy_secure_prefs.xml" />
+</full-backup-content>

@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Chordy</string>
+    <string name="notif_channel_name">Chordy is watching your charger</string>
+    <string name="notif_channel_desc">Persistent notification required to keep Chordy\'s power monitoring alive.</string>
+    <string name="notif_title">Chordy</string>
+    <string name="notif_text">plugged in and paying attention.</string>
+    <string name="overlay_permission_prompt">Chordy lives on your screen — grant overlay access so he can react when you plug in or unplug.</string>
+    <string name="battery_permission_prompt">One tap to keep Chordy alive — OEM battery managers kill unexempted services. Strongly recommended, skippable.</string>
+    <string name="notif_permission_prompt">Chordy posts a low-key persistent notification. Allow notifications so Android lets him run.</string>
+    <string name="btn_grant">grant it</string>
+    <string name="btn_skip">skip</string>
+    <string name="all_set">all set — chordy is waking up…</string>
+    <string name="settings_title">chordy settings</string>
+    <string name="personality_label">personality</string>
+    <string name="llm_section">AI-generated lines</string>
+    <string name="llm_key_label">LLM API key</string>
+    <string name="llm_base_url_label">LLM base URL</string>
+    <string name="llm_model_label">model</string>
+    <string name="tts_section">voice (cloud TTS)</string>
+    <string name="tts_key_label">TTS API key</string>
+    <string name="tts_base_url_label">TTS base URL</string>
+    <string name="tts_voice_ids_label">voice IDs per personality</string>
+    <string name="ai_lines_on_hint">on — LLM writes fresh lines per event</string>
+    <string name="ai_lines_off_hint">off — canned lines only, zero cost, works offline</string>
+    <string name="mood_tiers_hint">mood tiers: 0–1 calm · 2–3 anxious · 4+ angry</string>
+    <string name="reset_counter">reset reconnect counter</string>
+    <string name="counter_value">reconnects so far: %1$d</string>
+    <string name="test_line">say something</string>
+</resources>

@@ -1,0 +1,10 @@
+<resources>
+    <!-- Dark, flat, one accent. No gradients — Chordy is a creature of habit. -->
+    <style name="Theme.Chordy" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#101014</item>
+        <item name="android:windowBackground">#101014</item>
+        <item name="android:colorAccent">#7FD4A8</item>
+        <item name="android:colorPrimary">#7FD4A8</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

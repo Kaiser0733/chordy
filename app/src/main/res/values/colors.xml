@@ -1,0 +1,8 @@
+<resources>
+    <color name="ic_launcher_background">#101014</color>
+    <color name="chordy_mint">#7FD4A8</color>
+    <color name="chordy_bg">#101014</color>
+    <color name="chordy_ink">#101014</color>
+    <color name="chordy_bubble_bg">#1C1C24</color>
+    <color name="chordy_bubble_stroke">#33333F</color>
+</resources>
