@@ -21,7 +21,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) return
-        val store = GlobalContext.get().get(SettingsStore::class)
+        val store: SettingsStore = GlobalContext.get().get()
         if (!store.monitoringEnabled) return
         PowerMonitorService.start(context)
     }

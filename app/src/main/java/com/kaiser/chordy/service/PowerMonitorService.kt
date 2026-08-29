@@ -134,7 +134,9 @@ class PowerMonitorService : Service() {
         val personality = settings.selectedPersonality
         val now = System.currentTimeMillis()
 
-        // state update first — mood tier drives everything downstream
+        // state update first — mood tier drives everything downstream.
+        // UNLOCK / APP_OPENED are pure reaction events: no counter bumps, no
+        // timestamps — they ride the existing mood, they don't escalate it.
         when (event) {
             PowerEvent.CONNECTED -> {
                 if (settings.lastDisconnectTs > 0L) {
@@ -145,6 +147,8 @@ class PowerMonitorService : Service() {
             PowerEvent.DISCONNECTED -> {
                 settings.lastDisconnectTs = now
             }
+            PowerEvent.UNLOCK -> { /* reaction-only */ }
+            PowerEvent.APP_OPENED -> { /* reaction-only */ }
         }
         val tier = MoodTier.fromReconnectCount(settings.reconnectCount)
 
