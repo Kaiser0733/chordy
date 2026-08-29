@@ -106,9 +106,11 @@ class MainActivity : ComponentActivity() {
     private fun PermissionScaffold(onAllGranted: () -> Unit) {
         val hasOverlay = remember(refreshTick) { Settings.canDrawOverlays(this) }
         val hasNotif = remember(refreshTick) {
-            Build.VERSION.SDK_INT < 33 ||
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    == PackageManager.PERMISSION_GRANTED
+            // NB: binary operators must not start a line inside a lambda body —
+            // K2 parses the previous line as a complete statement and dies on "== ...".
+            Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
         }
         val hasBattery = remember(refreshTick) { isIgnoringBatteryOptimizations() }
         var batterySkipped by remember { mutableStateOf(false) }
