@@ -26,4 +26,27 @@
     <string name="reset_counter">reset reconnect counter</string>
     <string name="counter_value">reconnects so far: %1$d</string>
     <string name="test_line">say something</string>
+    <string name="presence_section">presence</string>
+    <string name="react_unlock_toggle">React to unlock</string>
+    <string name="react_app_opens_toggle">React to app opens</string>
+    <string name="accessibility_status_on">accessibility: on — chordy can see app changes</string>
+    <string name="accessibility_status_off">accessibility: off — enable it so chordy can notice app changes</string>
+    <string name="accessibility_service_label">Chordy presence watcher</string>
+    <string name="accessibility_service_desc">Lets Chordy notice when you open apps so he can react. Reads only window-change events; no screen content, no data leaves the device.</string>
+    <string name="accessibility_open_settings">open accessibility settings</string>
+    <string name="status_title">chordy status</string>
+    <string name="status_running">monitoring — chordy is watching</string>
+    <string name="status_stopped">paused — chordy is asleep</string>
+    <string name="btn_pause">pause chordy</string>
+    <string name="btn_resume">wake chordy up</string>
+    <string name="btn_test_llm">test connection</string>
+    <string name="btn_test_tts">test voice</string>
+    <string name="llm_saved_hint">saved automatically as you type — test to confirm it works</string>
+    <string name="llm_test_pending">asking the model…</string>
+    <string name="llm_test_fail">connection failed — check key, base URL, and model</string>
+    <string name="tts_saved_hint">saved automatically — test to hear the voice</string>
+    <string name="tts_test_pending">synthesizing…</string>
+    <string name="tts_test_ok">played — did you hear it?</string>
+    <string name="tts_test_fail">synthesis failed — check key, URL, and voice ID</string>
+    <string name="test_no_voice">set a voice ID for this personality first</string>
 </resources>

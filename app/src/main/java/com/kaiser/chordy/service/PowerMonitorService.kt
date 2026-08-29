@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.kaiser.chordy.R
+import com.kaiser.chordy.accessibility.AppForegroundService
 import com.kaiser.chordy.audio.AudioPlayer
 import com.kaiser.chordy.data.LineBank
 import com.kaiser.chordy.data.MoodTier
@@ -58,10 +59,24 @@ class PowerMonitorService : Service() {
         }
     }
 
+    /**
+     * UNLOCK has no debounce — power events share one to kill cable-jiggle noise,
+     * but unlock is a deliberate human act, not hardware chatter. Every unlock
+     * gets its own reaction (per spec: no cooldown on unlock).
+     */
+    private val unlockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != Intent.ACTION_USER_PRESENT) return
+            if (!settings.reactToUnlock) return
+            handleEvent(PowerEvent.UNLOCK)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         createChannel()
         startForeground(NOTIF_ID, buildNotification())
+        isRunning = true
         registerReceiver(
             powerReceiver,
             IntentFilter().apply {
@@ -69,11 +84,20 @@ class PowerMonitorService : Service() {
                 addAction(Intent.ACTION_POWER_DISCONNECTED)
             }
         )
+        // ACTION_USER_PRESENT is delivery-to-registered-receivers-only on
+        // Android 8+, so this one lives purely at runtime (per spec).
+        registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
         // restore the face for this boot session
         overlay.show(MoodTier.fromReconnectCount(settings.reconnectCount))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // AppForegroundService forwards APP_OPENED through startForegroundService
+        // with this action + package extra; power/unlock paths never carry it.
+        if (intent?.action == AppForegroundService.ACTION_APP_OPENED) {
+            val pkg = intent.getStringExtra(AppForegroundService.EXTRA_PACKAGE)
+            onAppOpened(pkg)
+        }
         // Battery optimization exemption is requested by MainActivity on first run;
         // this service just lives forever once started (START_STICKY on OEM kills).
         return START_STICKY
@@ -82,7 +106,9 @@ class PowerMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        isRunning = false
         unregisterReceiver(powerReceiver)
+        unregisterReceiver(unlockReceiver)
         overlay.hide()
         audio.stop()
         worker.shutdownNow()
@@ -91,7 +117,20 @@ class PowerMonitorService : Service() {
 
     // ---------- event pipeline ----------
 
-    private fun handleEvent(event: PowerEvent) {
+    /**
+     * APP_OPENED path, cooldown lives HERE — the gate must sit between the
+     * sensor event and handleEvent, or it's decoration. 5-minute window,
+     * named constant so tuning it later is a one-line change.
+     */
+    private fun onAppOpened(packageName: String?) {
+        if (!settings.reactToAppOpens) return
+        val now = System.currentTimeMillis()
+        if (now - settings.lastAppReactionTimestamp < APP_OPEN_COOLDOWN_MS) return
+        settings.lastAppReactionTimestamp = now
+        handleEvent(PowerEvent.APP_OPENED, packageName)
+    }
+
+    private fun handleEvent(event: PowerEvent, context: String? = null) {
         val personality = settings.selectedPersonality
         val now = System.currentTimeMillis()
 
@@ -123,7 +162,7 @@ class PowerMonitorService : Service() {
                     model = settings.llmModel,
                     personaPrompt = personality.personaPrompt,
                     moodTierName = tier.name,
-                    event = event.name,
+                    event = if (context != null) "${event.name} of $context" else event.name,
                     reconnectCount = settings.reconnectCount
                 )
                 // swap in only if a newer event hasn't superseded us
@@ -192,10 +231,29 @@ class PowerMonitorService : Service() {
         private const val CHANNEL_ID = "chordy_monitor"
         private const val NOTIF_ID = 42
 
+        /** APP_OPENED cooldown — named, not magic. 5 minutes by default. */
+        const val APP_OPEN_COOLDOWN_MS: Long = 5 * 60 * 1000L
+
+        /**
+         * Live service state for the settings screen: true from onCreate to
+         * onDestroy. Lets the status row distinguish "paused by user" from
+         * "killed by the system" — both show the wake button.
+         */
+        @Volatile var isRunning: Boolean = false
+
         private val lineGeneration = java.util.concurrent.atomic.AtomicInteger(0)
 
         fun start(context: Context) {
             val intent = Intent(context, PowerMonitorService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        /** Overload used by AppForegroundService — carries the APP_OPENED action + package. */
+        fun start(context: Context, intent: Intent) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {

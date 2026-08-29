@@ -1,9 +1,10 @@
 package com.kaiser.chordy.data
 
 /**
- * What happened to the cable. DRIVING the reaction.
+ * What Chordy just noticed. Power events remain the emotional core; presence
+ * events (UNLOCK, APP_OPENED) are the "he noticed you" layer on top.
  */
-enum class PowerEvent { CONNECTED, DISCONNECTED }
+enum class PowerEvent { CONNECTED, DISCONNECTED, UNLOCK, APP_OPENED }
 
 /**
  * Mood escalation tiers. 0–1 reconnects = CALM, 2–3 = ANXIOUS, 4+ = ANGRY.

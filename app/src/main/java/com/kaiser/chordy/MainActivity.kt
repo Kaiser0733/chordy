@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kaiser.chordy.R
 import com.kaiser.chordy.data.SettingsStore
+import com.kaiser.chordy.audio.AudioPlayer
+import com.kaiser.chordy.network.LlmClient
+import com.kaiser.chordy.network.TtsClient
 import com.kaiser.chordy.service.PowerMonitorService
 import com.kaiser.chordy.ui.ChordyTheme
 import com.kaiser.chordy.ui.SettingsScreen
@@ -47,6 +50,9 @@ import org.koin.android.ext.android.inject
 class MainActivity : ComponentActivity() {
 
     private val store: SettingsStore by inject()
+    private val llm: LlmClient by inject()
+    private val tts: TtsClient by inject()
+    private val audio: AudioPlayer by inject()
 
     // Bumped whenever a permission hop returns so the scaffold recomposes and
     // re-reads live system state instead of trusting stale remembered values.
@@ -72,6 +78,15 @@ class MainActivity : ComponentActivity() {
         // cheap check, catches real cases (user revoked overlay in settings).
         if (needsPermissions()) uiStage = UiStage.PERMISSIONS
 
+        // Common-sense revival: if the user never paused Chordy but the system
+        // killed the service (swipe-away, OEM cleanup), opening the app brings
+        // him back. Users who paused stay paused — the wake button is theirs.
+        if (!needsPermissions() && store.firstRunDone &&
+            store.monitoringEnabled && !PowerMonitorService.isRunning
+        ) {
+            PowerMonitorService.start(this)
+        }
+
         setContent {
             ChordyTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
@@ -83,7 +98,12 @@ class MainActivity : ComponentActivity() {
                                 PowerMonitorService.start(this)
                             }
                         )
-                        UiStage.SETTINGS -> SettingsScreen(store)
+                        UiStage.SETTINGS -> SettingsScreen(
+                            store = store,
+                            llm = llm,
+                            tts = tts,
+                            audio = audio
+                        )
                     }
                 }
             }

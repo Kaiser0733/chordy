@@ -36,6 +36,7 @@ Three configurable blocks in Settings:
 - `POST_NOTIFICATIONS` — Android 13+; one low-priority persistent notification, required for foreground services.
 - `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` — asked once; OEM battery managers kill unexempted services (Samsung especially).
 - `RECEIVE_BOOT_COMPLETED` — restarts monitoring after reboot (best-effort; Android 12+ limits service starts from background receivers).
+- Accessibility (no manifest permission) — the "React to app opens" feature uses an AccessibilityService that watches for window-change events so Chordy can notice when you open apps. It reads no screen content and keeps nothing; enable it in Settings > Accessibility via the button in Chordy's settings, and disable it any time to turn app reactions off entirely.
 
 ## Repo layout
 

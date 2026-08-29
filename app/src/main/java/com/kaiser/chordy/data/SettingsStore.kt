@@ -71,6 +71,31 @@ class SettingsStore(context: Context) {
         get() = plain.getBoolean(KEY_AI_LINES, false)
         set(value) = plain.edit().putBoolean(KEY_AI_LINES, value).apply()
 
+    /** React to device unlock. Default ON. */
+    var reactToUnlock: Boolean
+        get() = plain.getBoolean(KEY_REACT_UNLOCK, true)
+        set(value) = plain.edit().putBoolean(KEY_REACT_UNLOCK, value).apply()
+
+    /** React to foreground app changes. Default ON (cooldown still applies). */
+    var reactToAppOpens: Boolean
+        get() = plain.getBoolean(KEY_REACT_APP_OPENS, true)
+        set(value) = plain.edit().putBoolean(KEY_REACT_APP_OPENS, value).apply()
+
+    /** Timestamp of the last APP_OPENED reaction — gates the 5-minute cooldown. */
+    var lastAppReactionTimestamp: Long
+        get() = plain.getLong(KEY_LAST_APP_REACTION_TS, 0L)
+        set(value) = plain.edit().putLong(KEY_LAST_APP_REACTION_TS, value).apply()
+
+    /**
+     * Master switch: is the PowerMonitorService supposed to be running?
+     * Persisted so "paused" survives reboot (BootReceiver checks this).
+     * Killing the app from recents also stops the service — the Settings
+     * screen detects that and offers to wake him back up.
+     */
+    var monitoringEnabled: Boolean
+        get() = plain.getBoolean(KEY_MONITORING_ENABLED, true)
+        set(value) = plain.edit().putBoolean(KEY_MONITORING_ENABLED, value).apply()
+
     // ---------- LLM config ----------
 
     var llmApiKey: String
@@ -128,6 +153,10 @@ class SettingsStore(context: Context) {
         const val KEY_TTS_KEY = "tts_api_key"
         const val KEY_TTS_URL = "tts_base_url"
         const val KEY_VOICE_PREFIX = "voice_id_"
+        const val KEY_REACT_UNLOCK = "react_to_unlock"
+        const val KEY_REACT_APP_OPENS = "react_to_app_opens"
+        const val KEY_LAST_APP_REACTION_TS = "last_app_reaction_ts"
+        const val KEY_MONITORING_ENABLED = "monitoring_enabled"
         const val KEY_FIRST_RUN = "first_run_done"
     }
 }

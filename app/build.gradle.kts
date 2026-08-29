@@ -45,6 +45,7 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.lifecycle.runtime.ktx)
+    implementation(libs.lifecycle.runtime.compose)
     androidTestImplementation(platform(libs.compose.bom))
     implementation(libs.lifecycle.service)
     implementation(libs.activity.compose)

@@ -4,7 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.core.content.ContextCompat
+import com.kaiser.chordy.data.SettingsStore
+import org.koin.core.context.GlobalContext
 
 /**
  * Restarts monitoring after reboot. RECEIVE_BOOT_COMPLETED receiver is declared
@@ -12,14 +13,16 @@ import androidx.core.content.ContextCompat
  * startForegroundService from the background — we can't fully fix that without
  * more ceremony than the feature warrants, so BootReceiver only starts the
  * service on Android 11 and below; 12+ users relaunch the app once after reboot.
- * (Battery-optimization-exempt apps get some slack, but the platform still
- * restricts FGS-on-boot; keeping the code simple and honest about it.)
+ *
+ * The persisted pause switch is respected: "paused before reboot" must stay
+ * "paused after reboot", not silently come back to life.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
-            PowerMonitorService.start(context)
-        }
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) return
+        val store = GlobalContext.get().get(SettingsStore::class)
+        if (!store.monitoringEnabled) return
+        PowerMonitorService.start(context)
     }
 }
