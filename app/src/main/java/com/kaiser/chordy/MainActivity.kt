@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -112,14 +113,12 @@ class MainActivity : ComponentActivity() {
         val hasBattery = remember(refreshTick) { isIgnoringBatteryOptimizations() }
         var batterySkipped by remember { mutableStateOf(false) }
 
-        LaunchedEffect(hasOverlay, hasNotif) {
-            // Overlay + notif are hard requirements; battery is recommended.
-            // We do NOT auto-advance while the battery card is showing —
-            // the user clicks "grant it" (then state refreshes) or "skip".
+        LaunchedEffect(hasOverlay, hasNotif, hasBattery, batterySkipped) {
+            // Overlay + notif are hard requirements; battery is recommended but
+            // skippable. Keys include all four states so a later battery grant
+            // (or skip) restarts this effect and advances — the old version keyed
+            // only on (hasOverlay, hasNotif) and never fired after the battery hop.
             if (hasOverlay && hasNotif && (hasBattery || batterySkipped)) onAllGranted()
-            else if (hasOverlay && hasNotif && !hasBattery && !batterySkipped) {
-                // battery card visible — wait for explicit user action
-            }
         }
 
         Column(

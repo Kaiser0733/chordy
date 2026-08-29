@@ -59,7 +59,7 @@ class TtsClient {
         ).let { json.encodeToString(TtsRequest.serializer(), it) }
         val body: RequestBody = payload.toRequestBody("application/json".toMediaType())
         return try {
-            val response = api.speak(endpoint, "Bearer $apiKey", body).execute()
+            val response = api.speak(endpoint, "Bearer $apiKey", body)
             if (!response.isSuccessful) return null
             val bytes = response.body()?.bytes() ?: return null
             when {
@@ -69,7 +69,7 @@ class TtsClient {
                 else -> bytes // raw audio bytes — the happy path
             }
         } catch (e: Exception) {
-            null // silent skip by contract
+            null // silent skip by contract — text still shown
         }
     }
 

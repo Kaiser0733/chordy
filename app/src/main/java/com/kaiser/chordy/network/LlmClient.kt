@@ -71,10 +71,10 @@ class LlmClient {
             )
         )
         return try {
-            val response = api.chat(endpoint, authHeader(apiKey), request).execute()
-            val body = response.body() ?: return null
+            val response = api.chat(endpoint, authHeader(apiKey), request)
             if (!response.isSuccessful) null
-            else body.choices.firstOrNull()?.message?.content?.trim()?.takeIf { it.isNotEmpty() }
+            else response.body()?.choices?.firstOrNull()?.message?.content?.trim()
+                ?.takeIf { it.isNotEmpty() }
         } catch (e: Exception) {
             null // timeout, DNS, TLS, parse — LineBank catches all of it
         }
