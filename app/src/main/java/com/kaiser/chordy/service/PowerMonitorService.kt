@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.kaiser.chordy.R
 import com.kaiser.chordy.audio.AudioPlayer
 import com.kaiser.chordy.data.LineBank
 import com.kaiser.chordy.data.MoodTier

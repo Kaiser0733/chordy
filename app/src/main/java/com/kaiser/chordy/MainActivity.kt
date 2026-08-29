@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.kaiser.chordy.R
 import com.kaiser.chordy.data.SettingsStore
 import com.kaiser.chordy.service.PowerMonitorService
 import com.kaiser.chordy.ui.ChordyTheme
