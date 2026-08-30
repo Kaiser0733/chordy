@@ -15,6 +15,7 @@ import com.kaiser.chordy.R
 import com.kaiser.chordy.BuildConfig
 import com.kaiser.chordy.accessibility.AppForegroundService
 import com.kaiser.chordy.audio.AudioPlayer
+import com.kaiser.chordy.data.BundledEndpoints
 import com.kaiser.chordy.data.MoodTier
 import com.kaiser.chordy.data.PersonaStore
 import com.kaiser.chordy.data.PowerEvent
@@ -167,10 +168,13 @@ class PowerMonitorService : Service() {
         val genAt = lineGeneration.incrementAndGet()
         overlay.showThinking()
         worker.execute {
+            // Effective config: user override wins; otherwise the SELECTED
+            // bundled endpoint (Groq default — ~1s vs NIM's ~5s).
+            val chosen = BundledEndpoints.byId(settings.defaultEndpointId) ?: BundledEndpoints.GROQ
             val result = llm.generateLine(
-                baseUrl = settings.llmBaseUrl.ifBlank { BuildConfig.NIM_BASE_URL },
-                apiKey = settings.llmApiKey.ifBlank { BuildConfig.NIM_API_KEY },
-                model = settings.llmModel.ifBlank { BuildConfig.NIM_MODEL },
+                baseUrl = settings.llmBaseUrl.ifBlank { chosen.baseUrl },
+                apiKey = settings.llmApiKey.ifBlank { chosen.apiKey },
+                model = settings.llmModel.ifBlank { chosen.model },
                 personaPrompt = persona.systemPrompt,
                 moodTierName = tier.name,
                 event = if (context != null) "${event.name} of $context" else event.name,

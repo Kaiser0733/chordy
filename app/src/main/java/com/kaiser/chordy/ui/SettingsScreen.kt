@@ -49,6 +49,7 @@ import com.kaiser.chordy.R
 import com.kaiser.chordy.accessibility.AppForegroundService
 import com.kaiser.chordy.audio.AudioPlayer
 import com.kaiser.chordy.BuildConfig
+import com.kaiser.chordy.data.BundledEndpoints
 import com.kaiser.chordy.data.Persona
 import com.kaiser.chordy.data.PersonaStore
 import com.kaiser.chordy.data.SettingsStore
@@ -230,10 +231,11 @@ fun SettingsScreen(
                         testing = true
                         previewLine = null
                         scope.launch(Dispatchers.IO) {
+                            val chosen = BundledEndpoints.byId(store.defaultEndpointId) ?: BundledEndpoints.GROQ
                             val result = llm.generateLine(
-                                baseUrl = store.llmBaseUrl.ifBlank { BuildConfig.NIM_BASE_URL },
-                                apiKey = store.llmApiKey.ifBlank { BuildConfig.NIM_API_KEY },
-                                model = store.llmModel.ifBlank { BuildConfig.NIM_MODEL },
+                                baseUrl = store.llmBaseUrl.ifBlank { chosen.baseUrl },
+                                apiKey = store.llmApiKey.ifBlank { chosen.apiKey },
+                                model = store.llmModel.ifBlank { chosen.model },
                                 personaPrompt = persona.systemPrompt,
                                 moodTierName = "CALM",
                                 event = "TEST",
@@ -386,11 +388,34 @@ private fun AdvancedCards(
                     aiLines = it; store.aiLinesEnabled = it
                 }
 
+                // ---- default model picker (both bundled endpoints) ----
+                Text(stringResource(R.string.llm_default_model), style = MaterialTheme.typography.bodyMedium)
+                var chosenEndpointId by remember { mutableStateOf(store.defaultEndpointId) }
+                BundledEndpoints.all.forEach { ep ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            chosenEndpointId = ep.id
+                            store.defaultEndpointId = ep.id
+                        },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = chosenEndpointId == ep.id,
+                            onClick = {
+                                chosenEndpointId = ep.id
+                                store.defaultEndpointId = ep.id
+                            }
+                        )
+                        Text(ep.label, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                val chosen = BundledEndpoints.byId(chosenEndpointId) ?: BundledEndpoints.GROQ
+
                 // Which source is LIVE right now — no ambiguity.
                 val usingOverride = llmUrl.isNotBlank() || llmKey.isNotBlank() || llmModel.isNotBlank()
                 Text(
                     if (usingOverride) stringResource(R.string.llm_active_yours)
-                    else stringResource(R.string.llm_active_builtin),
+                    else chosen.label,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -407,9 +432,9 @@ private fun AdvancedCards(
                         testingApi = true
                         scope.launch(Dispatchers.IO) {
                             val result = llm.generateLine(
-                                baseUrl = llmUrl.ifBlank { BuildConfig.NIM_BASE_URL },
-                                apiKey = llmKey.ifBlank { BuildConfig.NIM_API_KEY },
-                                model = llmModel.ifBlank { BuildConfig.NIM_MODEL },
+                                baseUrl = llmUrl.ifBlank { chosen.baseUrl },
+                                apiKey = llmKey.ifBlank { chosen.apiKey },
+                                model = llmModel.ifBlank { chosen.model },
                                 personaPrompt = persona?.systemPrompt ?: "",
                                 moodTierName = "CALM",
                                 event = "TEST",

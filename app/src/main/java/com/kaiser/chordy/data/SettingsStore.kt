@@ -65,6 +65,15 @@ class SettingsStore(context: Context) {
         get() = plain.getString(KEY_PERSONA_ID, PersonaStore.ID_CLINGY) ?: PersonaStore.ID_CLINGY
         set(value) = plain.edit().putString(KEY_PERSONA_ID, value).apply()
 
+    /**
+     * Which BUNDLED endpoint is the default (BundledEndpoints ids: "groq",
+     * "nim"). Only applies when the user hasn't typed their own API override —
+     * any override field filled wins over this.
+     */
+    var defaultEndpointId: String
+        get() = plain.getString(KEY_DEFAULT_ENDPOINT, BundledEndpoints.GROQ.id) ?: BundledEndpoints.GROQ.id
+        set(value) = plain.edit().putString(KEY_DEFAULT_ENDPOINT, value).apply()
+
     // ---------- switches ----------
 
     /**
@@ -153,6 +162,7 @@ class SettingsStore(context: Context) {
         const val KEY_CONNECT_TS = "last_connect_ts"
         const val KEY_PERSONALITY = "selected_personality"
         const val KEY_PERSONA_ID = "selected_persona_id"
+        const val KEY_DEFAULT_ENDPOINT = "default_endpoint_id"
         const val KEY_AI_LINES = "ai_lines_enabled"
         const val KEY_LLM_KEY = "llm_api_key"
         const val KEY_LLM_URL = "llm_base_url"

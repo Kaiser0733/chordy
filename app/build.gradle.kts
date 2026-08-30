@@ -13,15 +13,18 @@ android {
         applicationId = "com.kaiser.chordy"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.3.3"
+        versionCode = 7
+        versionName = "0.4.0"
 
-        // Bundled LLM config. The key arrives via GitHub Actions secret
-        // (NVIDIA_NIM_KEY) and lands only in the built APK via BuildConfig —
-        // never in a commit, never in source control.
+        // Bundled LLM config. Keys arrive via GitHub Actions secrets
+        // (NVIDIA_NIM_KEY, GROQ_API_KEY) and land only in the built APK via
+        // BuildConfig — never in a commit, never in source control.
         buildConfigField("String", "NIM_BASE_URL", "\"https://integrate.api.nvidia.com/v1\"")
         buildConfigField("String", "NIM_MODEL", "\"openai/gpt-oss-120b\"")
         buildConfigField("String", "NIM_API_KEY", "\"${System.getenv("NVIDIA_NIM_KEY") ?: ""}\"")
+        buildConfigField("String", "GROQ_BASE_URL", "\"https://api.groq.com/openai/v1\"")
+        buildConfigField("String", "GROQ_MODEL", "\"openai/gpt-oss-120b\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${System.getenv("GROQ_API_KEY") ?: ""}\"")
     }
 
     signingConfigs {

@@ -63,6 +63,7 @@
     <string name="llm_bundled_hint">uses the built-in endpoint by default — test below, override if you want your own</string>
     <string name="llm_override_hint">your own API (optional — leave blank for built-in)</string>
     <string name="llm_active_builtin">active: built-in endpoint (NVIDIA NIM, bundled)</string>
+    <string name="llm_default_model">default model</string>
     <string name="llm_active_yours">active: your own API (typed below)</string>
     <string name="btn_test_these_fields">test these fields</string>
     <string name="btn_back_to_builtin">clear — use built-in endpoint</string>
