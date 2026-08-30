@@ -26,6 +26,17 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # Restore THE stable debug keystore — every build signs with the same key,
+      # so in-app updates install over the old APK (no "apk conflict"). Without
+      # this, each ephemeral runner generated a fresh keystore and every APK had
+      # a different signature.
+      - name: Restore stable debug keystore
+        run: |
+          mkdir -p ~/.android
+          echo "${{ secrets.DEBUG_KEYSTORE_B64 }}" | base64 -d > ~/.android/debug.keystore
+          # sanity: the fingerprint must never change between builds
+          keytool -list -keystore ~/.android/debug.keystore -storepass "${{ secrets.DEBUG_KEYSTORE_PASS }}" -alias "${{ secrets.DEBUG_KEYSTORE_ALIAS }}" | grep SHA256 || true
+
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
         env:

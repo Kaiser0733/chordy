@@ -13,8 +13,8 @@ android {
         applicationId = "com.kaiser.chordy"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.3.1"
+        versionCode = 5
+        versionName = "0.3.2"
 
         // Bundled LLM config. The key arrives via GitHub Actions secret
         // (NVIDIA_NIM_KEY) and lands only in the built APK via BuildConfig —
@@ -24,7 +24,26 @@ android {
         buildConfigField("String", "NIM_API_KEY", "\"${System.getenv("NVIDIA_NIM_KEY") ?: ""}\"")
     }
 
+    signingConfigs {
+        create("stable") {
+            // THE one debug keystore — same key forever, so in-app updates
+            // install over the previous APK instead of dying on "apk conflict".
+            // CI restores this exact keystore from the DEBUG_KEYSTORE_B64 secret
+            // into ~/.android/debug.keystore before every build. If a local
+            // build can't find it, fall back to AGP's default debug keystore.
+            val ks = File(System.getProperty("user.home"), ".android/debug.keystore")
+            storeFile = ks
+            storePassword = "chordy"
+            keyAlias = "chordy"
+            keyPassword = "chordy"
+        }
+    }
+
     buildTypes {
+        debug {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("stable")
+        }
         release {
             isMinifyEnabled = false
         }
