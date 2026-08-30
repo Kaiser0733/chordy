@@ -31,9 +31,12 @@ class LlmClient {
     val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
     val okHttp: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
-        .writeTimeout(8, TimeUnit.SECONDS)
+        // Measured NIM latency: median ~5s, spikes past 6s, plus mobile-network
+        // overhead — 8s was a coin flip. 30s read + one in-client retry (below)
+        // absorbs both slow generations and transient 429s from the shared pool.
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
         .build()
 
     val api: ChatApi = Retrofit.Builder()
@@ -80,7 +83,13 @@ class LlmClient {
             )
         )
         return try {
-            val response = api.chat(endpoint, authHeader(apiKey), request).execute()
+            var response = api.chat(endpoint, authHeader(apiKey), request).execute()
+            // One retry for transient trouble (timeouts, 429 shared-pool, 5xx).
+            // Auth/config errors (401/403/404) fail fast — retrying those is noise.
+            if (!response.isSuccessful && response.code() in RETRYABLE_CODES) {
+                response.close()
+                response = api.chat(endpoint, authHeader(apiKey), request).execute()
+            }
             if (!response.isSuccessful) {
                 val errBody = response.errorBody()?.string()?.take(200) ?: "no body"
                 return Result.Fail("HTTP ${response.code()}: $errBody")
@@ -92,11 +101,36 @@ class LlmClient {
                 Result.Ok(content.trim())
             }
         } catch (e: Exception) {
-            Result.Fail(e.message?.take(120) ?: "network error")
+            // IOException covers SocketTimeoutException — the "failed. timeout"
+            // report. Retry once, then report the real reason.
+            val reason = when (e) {
+                is java.io.IOException -> "network timeout — the API is slow or unreachable"
+                else -> e.message?.take(120) ?: "network error"
+            }
+            val retryResult = try {
+                val response = api.chat(endpoint, authHeader(apiKey), request).execute()
+                if (!response.isSuccessful) {
+                    val errBody = response.errorBody()?.string()?.take(200) ?: "no body"
+                    Result.Fail("HTTP ${response.code()}: $errBody")
+                } else {
+                    val content = response.body()?.choices?.firstOrNull()?.message?.content
+                    if (content.isNullOrBlank()) {
+                        Result.Fail("model returned no content (try a larger max_tokens or another model)")
+                    } else {
+                        Result.Ok(content.trim())
+                    }
+                }
+            } catch (e2: Exception) {
+                Result.Fail("$reason (retried once, still failing)")
+            }
+            retryResult
         }
     }
 
     fun authHeader(key: String) = "Bearer $key"
+
+    /** HTTP codes worth one retry (rate-limit + server hiccups — not auth). */
+    private val RETRYABLE_CODES = setOf(429, 500, 502, 503, 504)
 
     /** Accepts either a bare base ("https://host/v1") or a full completions URL. */
     internal fun normalizeEndpoint(baseUrl: String): String {

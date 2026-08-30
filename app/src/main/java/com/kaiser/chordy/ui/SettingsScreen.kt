@@ -385,44 +385,51 @@ private fun AdvancedCards(
                 ToggleRow(stringResource(R.string.ai_lines_toggle), aiLines) {
                     aiLines = it; store.aiLinesEnabled = it
                 }
+
+                // Which source is LIVE right now — no ambiguity.
+                val usingOverride = llmUrl.isNotBlank() || llmKey.isNotBlank() || llmModel.isNotBlank()
                 Text(
-                    stringResource(R.string.llm_bundled_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    if (usingOverride) stringResource(R.string.llm_active_yours)
+                    else stringResource(R.string.llm_active_builtin),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
+
+                // ---- test the ACTIVE source (what actually speaks) ----
                 var llmTestState by remember { mutableStateOf<String?>(null) }
                 var llmTestOk by remember { mutableStateOf(false) }
-                OutlinedButton(onClick = {
-                    val persona = personaList.firstOrNull { it.id == selectedId }
-                    llmTestState = ctx.getString(R.string.llm_test_pending)
-                    llmTestOk = false
-                    scope.launch(Dispatchers.IO) {
-                        val result = llm.generateLine(
-                            baseUrl = llmUrl.ifBlank { BuildConfig.NIM_BASE_URL },
-                            apiKey = llmKey.ifBlank { BuildConfig.NIM_API_KEY },
-                            model = llmModel.ifBlank { BuildConfig.NIM_MODEL },
-                            personaPrompt = persona?.systemPrompt ?: "",
-                            moodTierName = "CALM",
-                            event = "TEST",
-                            reconnectCount = 0
-                        )
-                        withContext(Dispatchers.Main) {
-                            when (result) {
-                                is LlmClient.Result.Ok -> {
-                                    llmTestState = result.line
-                                    llmTestOk = true
-                                }
-                                is LlmClient.Result.Fail -> {
-                                    llmTestState = ctx.getString(
+                var testingApi by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = {
+                        val persona = personaList.firstOrNull { it.id == selectedId }
+                        llmTestState = ctx.getString(R.string.llm_test_pending)
+                        llmTestOk = false
+                        testingApi = true
+                        scope.launch(Dispatchers.IO) {
+                            val result = llm.generateLine(
+                                baseUrl = llmUrl.ifBlank { BuildConfig.NIM_BASE_URL },
+                                apiKey = llmKey.ifBlank { BuildConfig.NIM_API_KEY },
+                                model = llmModel.ifBlank { BuildConfig.NIM_MODEL },
+                                personaPrompt = persona?.systemPrompt ?: "",
+                                moodTierName = "CALM",
+                                event = "TEST",
+                                reconnectCount = 0
+                            )
+                            withContext(Dispatchers.Main) {
+                                llmTestState = when (result) {
+                                    is LlmClient.Result.Ok -> result.line
+                                    is LlmClient.Result.Fail -> ctx.getString(
                                         R.string.llm_test_fail_prefix, result.reason
                                     )
-                                    llmTestOk = false
                                 }
+                                llmTestOk = result is LlmClient.Result.Ok
+                                testingApi = false
                             }
                         }
-                    }
-                }) {
-                    Text(stringResource(R.string.btn_test_llm))
+                    },
+                    enabled = !testingApi
+                ) {
+                    Text(stringResource(if (testingApi) R.string.llm_test_pending else R.string.btn_test_llm))
                 }
                 llmTestState?.let {
                     Text(
@@ -432,7 +439,10 @@ private fun AdvancedCards(
                         else MaterialTheme.colorScheme.error
                     )
                 }
+
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+
+                // ---- bring your own API ----
                 Text(stringResource(R.string.llm_override_hint), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
@@ -454,6 +464,61 @@ private fun AdvancedCards(
                     label = { Text(stringResource(R.string.llm_model_label)) },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // Test EXACTLY what's typed above — fields only, no fallback.
+                var fieldTestState by remember { mutableStateOf<String?>(null) }
+                var fieldTestOk by remember { mutableStateOf(false) }
+                var testingFields by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = {
+                        fieldTestState = ctx.getString(R.string.llm_test_pending)
+                        fieldTestOk = false
+                        testingFields = true
+                        scope.launch(Dispatchers.IO) {
+                            val result = llm.generateLine(
+                                baseUrl = llmUrl,
+                                apiKey = llmKey,
+                                model = llmModel,
+                                personaPrompt = "Reply with one short word to confirm you work.",
+                                moodTierName = "CALM",
+                                event = "TEST",
+                                reconnectCount = 0
+                            )
+                            withContext(Dispatchers.Main) {
+                                fieldTestState = when (result) {
+                                    is LlmClient.Result.Ok -> result.line
+                                    is LlmClient.Result.Fail -> ctx.getString(
+                                        R.string.llm_test_fail_prefix, result.reason
+                                    )
+                                }
+                                fieldTestOk = result is LlmClient.Result.Ok
+                                testingFields = false
+                            }
+                        }
+                    },
+                    enabled = !testingFields && (llmUrl.isNotBlank() || llmKey.isNotBlank() || llmModel.isNotBlank())
+                ) {
+                    Text(stringResource(R.string.btn_test_these_fields))
+                }
+                fieldTestState?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (fieldTestOk) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error
+                    )
+                }
+
+                if (usingOverride) {
+                    // Clear override = switch back to the bundled endpoint.
+                    OutlinedButton(onClick = {
+                        llmKey = ""; store.llmApiKey = ""
+                        llmUrl = ""; store.llmBaseUrl = ""
+                        llmModel = ""; store.llmModel = ""
+                    }) {
+                        Text(stringResource(R.string.btn_back_to_builtin))
+                    }
+                }
             }
         }
 
