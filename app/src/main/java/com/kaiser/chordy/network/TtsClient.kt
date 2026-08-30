@@ -7,6 +7,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
+import retrofit2.Call
 import retrofit2.Retrofit
 import retrofit2.http.Body
 import retrofit2.http.Header
@@ -59,7 +61,7 @@ class TtsClient {
         ).let { json.encodeToString(TtsRequest.serializer(), it) }
         val body: RequestBody = payload.toRequestBody("application/json".toMediaType())
         return try {
-            val response = api.speak(endpoint, "Bearer $apiKey", body)
+            val response = api.speak(endpoint, "Bearer $apiKey", body).execute()
             if (!response.isSuccessful) return null
             val bytes = response.body()?.bytes() ?: return null
             when {
@@ -99,7 +101,7 @@ interface TtsApi {
         @Url endpoint: String,
         @Header("Authorization") auth: String,
         @Body body: RequestBody
-    ): retrofit2.Response<okhttp3.ResponseBody>
+    ): Call<ResponseBody>
 }
 
 @Serializable

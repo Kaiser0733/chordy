@@ -155,6 +155,33 @@ class OverlayManager(private val context: Context) {
         mainHandler.post { bubble?.pop() }
     }
 
+    /** Quiet "thinking" bubble while the LLM writes the line. */
+    fun showThinking() {
+        mainHandler.post {
+            if (!added) return@post
+            ensureSpeechViews()
+            speechText?.text = "…"
+            speechState?.visibility = View.GONE
+            positionSpeech()
+            if (!speechAdded) {
+                speechParams?.let { p ->
+                    speechLayout?.let { layout ->
+                        runCatching { wm.addView(layout, p) }
+                            .onSuccess {
+                                speechAdded = true
+                                showSpeechWithFade()
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    /** LLM failed — fade the thinking bubble away honestly. */
+    fun clearThinking() {
+        mainHandler.post { hideSpeech() }
+    }
+
     fun isShowing(): Boolean = added
 
     // ---------- internals ----------

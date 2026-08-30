@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,13 +49,13 @@ import com.kaiser.chordy.R
 import com.kaiser.chordy.accessibility.AppForegroundService
 import com.kaiser.chordy.audio.AudioPlayer
 import com.kaiser.chordy.BuildConfig
-import com.kaiser.chordy.data.LineBank
 import com.kaiser.chordy.data.Persona
 import com.kaiser.chordy.data.PersonaStore
 import com.kaiser.chordy.data.SettingsStore
 import com.kaiser.chordy.network.LlmClient
 import com.kaiser.chordy.network.TtsClient
 import com.kaiser.chordy.service.PowerMonitorService
+import com.kaiser.chordy.update.UpdateChecker
 
 /**
  * Home, not a control panel: one glance = "is he on?" One tap = pause/wake.
@@ -92,6 +93,15 @@ fun SettingsScreen(
     var creatingNew by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
     var previewLine by remember { mutableStateOf<String?>(null) }
+    var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
+    var downloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0) }
+
+    // Auto-check for updates on open (quietly — never blocks the UI).
+    val updateChecker: UpdateChecker = org.koin.core.context.GlobalContext.get().get()
+    LaunchedEffect(Unit) {
+        updateInfo = withContext(Dispatchers.IO) { updateChecker.checkForUpdate() }
+    }
 
     Column(
         modifier = modifier
@@ -122,6 +132,52 @@ fun SettingsScreen(
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
             Text(stringResource(if (monitoringOn) R.string.btn_pause else R.string.btn_resume))
+        }
+
+        // ============ update banner (one tap — no uninstall/reinstall) ============
+        if (updateInfo != null && !downloading) {
+            Card(colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            )) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        stringResource(R.string.update_available, updateInfo!!.versionName),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        stringResource(R.string.update_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = {
+                            downloading = true
+                            downloadProgress = 0
+                            scope.launch(Dispatchers.IO) {
+                                val ok = updateChecker.downloadAndInstall { p ->
+                                    scope.launch { downloadProgress = p }
+                                }
+                                if (!ok) {
+                                    withContext(Dispatchers.Main) {
+                                        downloading = false
+                                        updateInfo = null   // failed — hide banner, try next open
+                                    }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text(stringResource(R.string.btn_update_now))
+                    }
+                }
+            }
+        }
+        if (downloading) {
+            Text(
+                stringResource(R.string.update_downloading, downloadProgress),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
 
         // ============ personas ============
@@ -167,8 +223,36 @@ fun SettingsScreen(
                         }
                     }
                 }
-                OutlinedButton(onClick = { previewLine = LineBank.previewLine(selectedId) }) {
-                    Text(stringResource(R.string.test_line))
+                var testing by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = {
+                        val persona = personaList.firstOrNull { it.id == selectedId } ?: return@OutlinedButton
+                        testing = true
+                        previewLine = null
+                        scope.launch(Dispatchers.IO) {
+                            val result = llm.generateLine(
+                                baseUrl = store.llmBaseUrl.ifBlank { BuildConfig.NIM_BASE_URL },
+                                apiKey = store.llmApiKey.ifBlank { BuildConfig.NIM_API_KEY },
+                                model = store.llmModel.ifBlank { BuildConfig.NIM_MODEL },
+                                personaPrompt = persona.systemPrompt,
+                                moodTierName = "CALM",
+                                event = "TEST",
+                                reconnectCount = 0
+                            )
+                            withContext(Dispatchers.Main) {
+                                previewLine = when (result) {
+                                    is LlmClient.Result.Ok -> result.line
+                                    is LlmClient.Result.Fail -> ctx.getString(
+                                        R.string.llm_test_fail_prefix, result.reason
+                                    )
+                                }
+                                testing = false
+                            }
+                        }
+                    },
+                    enabled = !testing
+                ) {
+                    Text(stringResource(if (testing) R.string.llm_test_pending else R.string.test_line))
                 }
                 previewLine?.let {
                     Text(
@@ -405,7 +489,8 @@ private fun AdvancedCards(
                                 baseUrl = ttsUrl,
                                 apiKey = ttsKey,
                                 voiceId = voiceId,
-                                text = LineBank.previewLine(persona.id)
+                                // speak the persona's own name + vibe — no canned bank anymore
+                                text = "Hello. I am ${persona.name}. ${persona.voiceStyleTag}."
                             )
                             withContext(Dispatchers.Main) {
                                 if (bytes != null) {

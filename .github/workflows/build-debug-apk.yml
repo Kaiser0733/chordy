@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,3 +37,26 @@ jobs:
           name: chordy-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # ---------- in-app update channel ----------
+      # Every green build overwrites the "latest" release. The app's UpdateChecker
+      # reads update-info.json from there and offers a one-tap in-place install.
+      - name: Publish update release
+        run: |
+          VERSION_CODE=$(grep -oP 'versionCode = \K\d+' app/build.gradle.kts)
+          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          cp "$APK_PATH" chordy-update.apk
+          APK_URL="https://github.com/${{ github.repository }}/releases/download/latest/chordy-update.apk"
+          cat > update-info.json <<EOF
+          {"versionCode": $VERSION_CODE, "versionName": "$VERSION_NAME", "apkUrl": "$APK_URL"}
+          EOF
+          cat update-info.json
+          # delete the previous 'latest' release + tag, then publish fresh
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest chordy-update.apk update-info.json \
+            --title "Chordy $VERSION_NAME" \
+            --notes "Auto build $VERSION_NAME (code $VERSION_CODE) from ${{ github.sha }}" \
+            --prerelease=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

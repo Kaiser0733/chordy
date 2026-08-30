@@ -12,7 +12,7 @@
     <string name="all_set">all set — chordy is waking up…</string>
     <string name="settings_title">chordy settings</string>
     <string name="personality_label">personality</string>
-    <string name="llm_section">AI-generated lines</string>
+    <string name="llm_section">AI brain</string>
     <string name="llm_key_label">LLM API key</string>
     <string name="llm_base_url_label">LLM base URL</string>
     <string name="llm_model_label">model</string>
@@ -64,4 +64,8 @@
     <string name="llm_override_hint">your own API (optional — leave blank for built-in)</string>
     <string name="llm_test_fail_prefix">failed: %1$s</string>
     <string name="ai_lines_toggle">AI-generated lines</string>
+    <string name="update_available">update available — %1$s</string>
+    <string name="update_hint">one tap installs over the old app — your permissions and personas stay</string>
+    <string name="btn_update_now">update now</string>
+    <string name="update_downloading">downloading… %1$d%%</string>
 </resources>

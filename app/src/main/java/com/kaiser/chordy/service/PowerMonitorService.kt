@@ -15,7 +15,6 @@ import com.kaiser.chordy.R
 import com.kaiser.chordy.BuildConfig
 import com.kaiser.chordy.accessibility.AppForegroundService
 import com.kaiser.chordy.audio.AudioPlayer
-import com.kaiser.chordy.data.LineBank
 import com.kaiser.chordy.data.MoodTier
 import com.kaiser.chordy.data.PersonaStore
 import com.kaiser.chordy.data.PowerEvent
@@ -158,40 +157,38 @@ class PowerMonitorService : Service() {
         val tier = MoodTier.fromReconnectCount(settings.reconnectCount)
         overlay.pop()
 
-        // 1. Instant canned lifeboat — the bubble never waits on the network.
-        val canned = LineBank.line(persona.id, tier, event)
-        overlay.showLine(canned, tier, audioPending = settings.aiLinesEnabled)
+        // AI-ONLY: every line is LLM-generated from the persona's system prompt.
+        // No canned fallback — pre-written words felt empty (LO's call). The
+        // bubble shows a quiet "thinking" indicator while the request runs;
+        // on failure it clears honestly instead of faking words. The REAL
+        // error lands in logcat (tag PowerMonitorService) for debugging.
+        if (!settings.aiLinesEnabled) return   // toggle off = he stays silent
 
-        // 2. LLM is the main act now (AI lines default ON, bundled endpoint).
-        if (settings.aiLinesEnabled) {
-            val genAt = lineGeneration.incrementAndGet()
-            worker.execute {
-                val result = llm.generateLine(
-                    baseUrl = settings.llmBaseUrl.ifBlank { BuildConfig.NIM_BASE_URL },
-                    apiKey = settings.llmApiKey.ifBlank { BuildConfig.NIM_API_KEY },
-                    model = settings.llmModel.ifBlank { BuildConfig.NIM_MODEL },
-                    personaPrompt = persona.systemPrompt,
-                    moodTierName = tier.name,
-                    event = if (context != null) "${event.name} of $context" else event.name,
-                    reconnectCount = settings.reconnectCount
-                )
-                // swap in only if a newer event hasn't superseded us
-                if (genAt == lineGeneration.get()) {
-                    when (result) {
-                        is LlmClient.Result.Ok -> {
-                            overlay.showLine(result.line, tier, audioPending = true)
-                            speakLine(result.line, persona)
-                        }
-                        is LlmClient.Result.Fail -> {
-                            // LLM failed — keep the canned line up, log the REAL reason
-                            android.util.Log.w(TAG, "LLM line failed: ${result.reason}")
-                            speakLine(canned, persona)
-                        }
+        val genAt = lineGeneration.incrementAndGet()
+        overlay.showThinking()
+        worker.execute {
+            val result = llm.generateLine(
+                baseUrl = settings.llmBaseUrl.ifBlank { BuildConfig.NIM_BASE_URL },
+                apiKey = settings.llmApiKey.ifBlank { BuildConfig.NIM_API_KEY },
+                model = settings.llmModel.ifBlank { BuildConfig.NIM_MODEL },
+                personaPrompt = persona.systemPrompt,
+                moodTierName = tier.name,
+                event = if (context != null) "${event.name} of $context" else event.name,
+                reconnectCount = settings.reconnectCount
+            )
+            // apply only if a newer event hasn't superseded us
+            if (genAt == lineGeneration.get()) {
+                when (result) {
+                    is LlmClient.Result.Ok -> {
+                        overlay.showLine(result.line, tier, audioPending = true)
+                        speakLine(result.line, persona)
+                    }
+                    is LlmClient.Result.Fail -> {
+                        android.util.Log.w(TAG, "LLM line failed: ${result.reason}")
+                        overlay.clearThinking()
                     }
                 }
             }
-        } else {
-            speakLine(canned, persona)
         }
     }
 

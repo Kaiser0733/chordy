@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Call
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
@@ -78,7 +79,7 @@ class LlmClient {
             )
         )
         return try {
-            val response = api.chat(endpoint, authHeader(apiKey), request)
+            val response = api.chat(endpoint, authHeader(apiKey), request).execute()
             if (!response.isSuccessful) {
                 val errBody = response.errorBody()?.string()?.take(200) ?: "no body"
                 return Result.Fail("HTTP ${response.code()}: $errBody")
@@ -110,9 +111,9 @@ interface ChatApi {
     @POST
     fun chat(
         @Url endpoint: String,
-        @retrofit2.http.Header("Authorization") auth: String,
+        @Header("Authorization") auth: String,
         @Body body: ChatRequest
-    ): retrofit2.Response<ChatResponse>
+    ): Call<ChatResponse>
 }
 
 @Serializable
