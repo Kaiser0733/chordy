@@ -13,8 +13,15 @@ android {
         applicationId = "com.kaiser.chordy"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+
+        // Bundled LLM config. The key arrives via GitHub Actions secret
+        // (NVIDIA_NIM_KEY) and lands only in the built APK via BuildConfig —
+        // never in a commit, never in source control.
+        buildConfigField("String", "NIM_BASE_URL", "\"https://integrate.api.nvidia.com/v1\"")
+        buildConfigField("String", "NIM_MODEL", "\"openai/gpt-oss-120b\"")
+        buildConfigField("String", "NIM_API_KEY", "\"${System.getenv("NVIDIA_NIM_KEY") ?: ""}\"")
     }
 
     buildTypes {
@@ -34,6 +41,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

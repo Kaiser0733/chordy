@@ -42,6 +42,13 @@ class OverlayManager(private val context: Context) {
     private var currentLine: String = ""
     private var lineGeneration = 0   // stale-callback guard: bump on every showLine
 
+    companion object {
+        private const val TAG = "OverlayManager"
+        private const val LINE_VISIBLE_MS = 6_000L   // how long a line stays up
+        private const val FADE_IN_MS = 350L          // bubble fade-in
+        private const val FADE_OUT_MS = 700L         // bubble fade-out (the fix)
+    }
+
     // drag bookkeeping
     private var initialX = 0
     private var initialY = 0
@@ -115,12 +122,21 @@ class OverlayManager(private val context: Context) {
                 speechParams?.let { p ->
                     speechLayout?.let { layout ->
                         runCatching { wm.addView(layout, p) }
-                            .onSuccess { speechAdded = true }
+                            .onSuccess {
+                                speechAdded = true
+                                showSpeechWithFade()
+                            }
                     }
                 }
+            } else {
+                // Already visible (LLM swap-in): bump alpha back to full in
+                // case a fade-out was mid-flight when the new line landed.
+                speechLayout?.animate()?.cancel()
+                speechLayout?.alpha = 1f
             }
-            // auto-retract after 6s — Chordy is company, not a wall of text
-            mainHandler.postDelayed({ if (lineGeneration == gen) hideSpeech() }, 6000)
+            // Auto-retract 6s after THIS line landed — the generation guard
+            // cancels it if a newer line swaps in before the timer fires.
+            mainHandler.postDelayed({ if (lineGeneration == gen) hideSpeech() }, LINE_VISIBLE_MS)
         }
     }
 
@@ -134,15 +150,26 @@ class OverlayManager(private val context: Context) {
         mainHandler.post { bubble?.mood = mood }
     }
 
+    /** Physical "he noticed!" pop on the face — call with every new line. */
+    fun pop() {
+        mainHandler.post { bubble?.pop() }
+    }
+
     fun isShowing(): Boolean = added
 
     // ---------- internals ----------
 
     private fun hideSpeech() {
-        if (speechAdded) {
-            speechLayout?.let { runCatching { wm.removeView(it) } }
-            speechAdded = false
-        }
+        val layout = speechLayout
+        if (!speechAdded || layout == null) return
+        // Fade out, THEN remove — a hard removeView made the line vanish
+        // mid-read with zero grace (the "doesn't fade" complaint).
+        speechAdded = false
+        layout.animate()
+            .alpha(0f)
+            .setDuration(FADE_OUT_MS)
+            .withEndAction { runCatching { wm.removeView(layout) } }
+            .start()
     }
 
     private fun ensureSpeechViews() {
@@ -180,6 +207,13 @@ class OverlayManager(private val context: Context) {
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
+    }
+
+    /** Fade the speech bubble IN when a line arrives. */
+    private fun showSpeechWithFade() {
+        val layout = speechLayout ?: return
+        layout.alpha = 0f
+        layout.animate().alpha(1f).setDuration(FADE_IN_MS).start()
     }
 
     /** Place the speech bubble to the right of the face, clamped on-screen. */
@@ -232,7 +266,10 @@ class OverlayManager(private val context: Context) {
             speechParams?.let { p ->
                 speechLayout?.let { layout ->
                     runCatching { wm.addView(layout, p) }
-                        .onSuccess { speechAdded = true }
+                        .onSuccess {
+                            speechAdded = true
+                            showSpeechWithFade()
+                        }
                 }
             }
         }

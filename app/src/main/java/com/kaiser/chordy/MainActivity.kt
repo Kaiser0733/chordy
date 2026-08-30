@@ -33,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kaiser.chordy.R
+import com.kaiser.chordy.data.PersonaStore
 import com.kaiser.chordy.data.SettingsStore
 import com.kaiser.chordy.audio.AudioPlayer
 import com.kaiser.chordy.network.LlmClient
@@ -50,6 +51,7 @@ import org.koin.android.ext.android.inject
 class MainActivity : ComponentActivity() {
 
     private val store: SettingsStore by inject()
+    private val personas: PersonaStore by inject()
     private val llm: LlmClient by inject()
     private val tts: TtsClient by inject()
     private val audio: AudioPlayer by inject()
@@ -100,6 +102,7 @@ class MainActivity : ComponentActivity() {
                         )
                         UiStage.SETTINGS -> SettingsScreen(
                             store = store,
+                            personas = personas,
                             llm = llm,
                             tts = tts,
                             audio = audio

@@ -26,6 +26,8 @@ jobs:
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
+        env:
+          NVIDIA_NIM_KEY: ${{ secrets.NVIDIA_NIM_KEY }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

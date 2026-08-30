@@ -14,37 +14,42 @@ import retrofit2.http.Url
 import java.util.concurrent.TimeUnit
 
 /**
- * OpenAI-compatible chat completions client. Base URL and key come from Settings
- * at call time — Retrofit bakes base URLs in at build time, so the endpoint is a
- * full URL parameter instead ("https://api.example.com/v1/chat/completions").
+ * OpenAI-compatible chat completions client. Default endpoint is NVIDIA NIM
+ * (bundled at build time via BuildConfig — key injected from a CI secret, so
+ * it ships in the APK but never in git). Users can still override all three
+ * in Settings; bundled values are the fallback.
  *
- * Hard rules: 3s timeouts, one short line back (~40 tokens), any failure = null,
- * caller falls back to LineBank. The app never crashes over a dead API.
+ * Hard rules: 8s timeouts (reasoning models need room — 3s was starving them),
+ * ~300-token budget (48 starves reasoning models into returning null content),
+ * any failure returns a LoadFailure with the REAL reason — callers show it
+ * instead of a misleading "check your URL" guess.
  */
 class LlmClient {
 
-    private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+    val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
-    private val okHttp: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(3, TimeUnit.SECONDS)
-        .writeTimeout(3, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        })
+    val okHttp: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .writeTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    private val api: ChatApi = Retrofit.Builder()
-        .baseUrl("https://localhost/")   // unused placeholder — every call passes @Url
+    val api: ChatApi = Retrofit.Builder()
+        .baseUrl("https://localhost/")   // placeholder — @Url carries the real endpoint
         .client(okHttp)
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()
         .create(ChatApi::class.java)
 
     /**
-     * Fetch one in-character line. Returns null on ANY failure — missing config,
-     * timeout, HTTP error, empty choices. Caller falls back to the LineBank.
+     * Outcome of a generateLine call: the line, or the actual reason it failed
+     * (HTTP status/body, timeout, empty content). Never a vague shrug.
      */
+    sealed class Result {
+        data class Ok(val line: String) : Result()
+        data class Fail(val reason: String) : Result()
+    }
+
     fun generateLine(
         baseUrl: String,
         apiKey: String,
@@ -53,12 +58,14 @@ class LlmClient {
         moodTierName: String,
         event: String,
         reconnectCount: Int
-    ): String? {
-        if (baseUrl.isBlank() || apiKey.isBlank() || model.isBlank()) return null
+    ): Result {
+        if (baseUrl.isBlank() || apiKey.isBlank() || model.isBlank()) {
+            return Result.Fail("missing key, base URL, or model")
+        }
         val endpoint = normalizeEndpoint(baseUrl)
         val request = ChatRequest(
             model = model,
-            max_tokens = 48,
+            max_tokens = 300,   // reasoning models spend budget thinking first
             temperature = 0.9f,
             messages = listOf(
                 Message(role = "system", content = personaPrompt),
@@ -72,15 +79,22 @@ class LlmClient {
         )
         return try {
             val response = api.chat(endpoint, authHeader(apiKey), request)
-            if (!response.isSuccessful) null
-            else response.body()?.choices?.firstOrNull()?.message?.content?.trim()
-                ?.takeIf { it.isNotEmpty() }
+            if (!response.isSuccessful) {
+                val errBody = response.errorBody()?.string()?.take(200) ?: "no body"
+                return Result.Fail("HTTP ${response.code()}: $errBody")
+            }
+            val content = response.body()?.choices?.firstOrNull()?.message?.content
+            if (content.isNullOrBlank()) {
+                Result.Fail("model returned no content (try a larger max_tokens or another model)")
+            } else {
+                Result.Ok(content.trim())
+            }
         } catch (e: Exception) {
-            null // timeout, DNS, TLS, parse — LineBank catches all of it
+            Result.Fail(e.message?.take(120) ?: "network error")
         }
     }
 
-    private fun authHeader(key: String) = "Bearer $key"
+    fun authHeader(key: String) = "Bearer $key"
 
     /** Accepts either a bare base ("https://host/v1") or a full completions URL. */
     internal fun normalizeEndpoint(baseUrl: String): String {

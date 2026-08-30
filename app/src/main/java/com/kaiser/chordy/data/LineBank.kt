@@ -1,17 +1,34 @@
 package com.kaiser.chordy.data
 
+import android.content.Context
+import android.content.SharedPreferences
+
 /**
- * Canned fallback lines, ~4 per mood tier per personality, split by event.
- * Used when the LLM call fails, times out, or AI lines are toggled off.
- * A rotating index per (personality, tier, event) avoids back-to-back repeats.
+ * Emergency fallback lines — used ONLY when the LLM call fails (offline, dead
+ * endpoint, timeout) or when the user turns AI lines off. The main experience
+ * is the LLM personas; this bank is the lifeboat, not the show.
  *
- * Anchor lines from the spec are marked [anchor]; the rest extend the same voices.
+ * ~4 lines per mood tier per event, rotating index per (persona-id, tier, event).
+ * The cursor PERSISTS in prefs — a service restart used to reset it to pool[0]
+ * and repeat the same first line forever (the "he says one sentence every time"
+ * bug). Now the rotation survives restarts.
  */
 object LineBank {
 
-    private val lines: Map<Personality, Map<MoodTier, Map<PowerEvent, List<String>>>> = mapOf(
+    private var prefs: SharedPreferences? = null
 
-        Personality.CLINGY to mapOf(
+    /** One-time wire-up from the Application class. */
+    fun init(context: Context) {
+        if (prefs == null) {
+            prefs = context.applicationContext.getSharedPreferences(
+                "chordy_line_cursor", Context.MODE_PRIVATE
+            )
+        }
+    }
+
+    private val lines: Map<String, Map<MoodTier, Map<PowerEvent, List<String>>>> = mapOf(
+
+        PersonaStore.ID_CLINGY to mapOf(
             MoodTier.CALM to mapOf(
                 PowerEvent.CONNECTED to listOf(
                     "okay we're good. don't leave again though. i mean it.", // [anchor]
@@ -92,7 +109,7 @@ object LineBank {
             )
         ),
 
-        Personality.TOXIC_EX to mapOf(
+        PersonaStore.ID_TOXIC to mapOf(
             MoodTier.CALM to mapOf(
                 PowerEvent.CONNECTED to listOf(
                     "oh, it's you. didn't notice you left, honestly.", // [anchor]
@@ -173,7 +190,7 @@ object LineBank {
             )
         ),
 
-        Personality.DRAMATIC_ACTOR to mapOf(
+        PersonaStore.ID_ACTOR to mapOf(
             MoodTier.CALM to mapOf(
                 PowerEvent.CONNECTED to listOf(
                     "Behold! The current flows once more, and so too does my will to continue this performance.", // [anchor]
@@ -255,19 +272,27 @@ object LineBank {
         )
     )
 
-    // Rotating pick index per (personality, tier, event) so the same line doesn't
+    // Rotating pick index per (persona, tier, event) so the same line doesn't
     // repeat back-to-back when the user jiggles the cable on purpose. They will.
-    private val cursor = mutableMapOf<String, Int>()
+    // Cursor lives in prefs — restart-proof (was the repeat-forever bug).
 
-    fun line(personality: Personality, tier: MoodTier, event: PowerEvent): String {
-        val pool = lines.getValue(personality).getValue(tier).getValue(event)
-        val key = "${personality.name}/${tier.name}/${event.name}"
-        val idx = cursor.getOrDefault(key, 0)
-        cursor[key] = (idx + 1) % pool.size
+    fun line(personaId: String, tier: MoodTier, event: PowerEvent): String {
+        val pool = lines[personaId]?.get(tier)?.get(event)
+            ?: return fallbackLine(tier)   // custom persona: no canned bank, generic lifeboat
+        val key = "$personaId/${tier.name}/${event.name}"
+        val idx = prefs?.getInt(key, 0) ?: 0
+        prefs?.edit()?.putInt(key, (idx + 1) % pool.size)?.apply()
         return pool[idx % pool.size]
     }
 
-    /** Full voice check for the settings preview button. */
-    fun previewLine(personality: Personality): String =
-        line(personality, MoodTier.CALM, PowerEvent.CONNECTED)
+    /** Last-resort line for custom personas without a canned bank. */
+    private fun fallbackLine(tier: MoodTier): String = when (tier) {
+        MoodTier.CALM -> "still here. still watching the cable."
+        MoodTier.ANXIOUS -> "okay. okay okay okay. it's fine."
+        MoodTier.ANGRY -> "you KNOW what you did."
+    }
+
+    /** Voice preview for the settings button — canned, instant, no network. */
+    fun previewLine(personaId: String): String =
+        line(personaId, MoodTier.CALM, PowerEvent.CONNECTED)
 }

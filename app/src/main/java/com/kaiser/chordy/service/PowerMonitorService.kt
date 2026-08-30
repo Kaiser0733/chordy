@@ -12,10 +12,12 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.kaiser.chordy.R
+import com.kaiser.chordy.BuildConfig
 import com.kaiser.chordy.accessibility.AppForegroundService
 import com.kaiser.chordy.audio.AudioPlayer
 import com.kaiser.chordy.data.LineBank
 import com.kaiser.chordy.data.MoodTier
+import com.kaiser.chordy.data.PersonaStore
 import com.kaiser.chordy.data.PowerEvent
 import com.kaiser.chordy.data.SettingsStore
 import com.kaiser.chordy.network.LlmClient
@@ -39,6 +41,7 @@ class PowerMonitorService : Service() {
     private val llm: LlmClient by inject()
     private val tts: TtsClient by inject()
     private val audio: AudioPlayer by inject()
+    private val personas: PersonaStore by inject()
 
     private val worker = Executors.newSingleThreadExecutor { r ->
         Thread(r, "chordy-line-worker").apply { isDaemon = true }
@@ -131,7 +134,9 @@ class PowerMonitorService : Service() {
     }
 
     private fun handleEvent(event: PowerEvent, context: String? = null) {
-        val personality = settings.selectedPersonality
+        val persona = personas.byId(settings.selectedPersonaId)
+            ?: personas.all().firstOrNull()
+            ?: return   // no personas at all — nothing to say, stay quiet safely
         val now = System.currentTimeMillis()
 
         // state update first — mood tier drives everything downstream.
@@ -151,40 +156,47 @@ class PowerMonitorService : Service() {
             PowerEvent.APP_OPENED -> { /* reaction-only */ }
         }
         val tier = MoodTier.fromReconnectCount(settings.reconnectCount)
+        overlay.pop()
 
-        // 1. Instant canned line — the bubble never waits on the network.
-        val canned = LineBank.line(personality, tier, event)
+        // 1. Instant canned lifeboat — the bubble never waits on the network.
+        val canned = LineBank.line(persona.id, tier, event)
         overlay.showLine(canned, tier, audioPending = settings.aiLinesEnabled)
 
-        // 2. LLM upgrade-in-place, only if enabled
+        // 2. LLM is the main act now (AI lines default ON, bundled endpoint).
         if (settings.aiLinesEnabled) {
             val genAt = lineGeneration.incrementAndGet()
             worker.execute {
-                val aiLine = llm.generateLine(
-                    baseUrl = settings.llmBaseUrl,
-                    apiKey = settings.llmApiKey,
-                    model = settings.llmModel,
-                    personaPrompt = personality.personaPrompt,
+                val result = llm.generateLine(
+                    baseUrl = settings.llmBaseUrl.ifBlank { BuildConfig.NIM_BASE_URL },
+                    apiKey = settings.llmApiKey.ifBlank { BuildConfig.NIM_API_KEY },
+                    model = settings.llmModel.ifBlank { BuildConfig.NIM_MODEL },
+                    personaPrompt = persona.systemPrompt,
                     moodTierName = tier.name,
                     event = if (context != null) "${event.name} of $context" else event.name,
                     reconnectCount = settings.reconnectCount
                 )
                 // swap in only if a newer event hasn't superseded us
-                if (aiLine != null && genAt == lineGeneration.get()) {
-                    overlay.showLine(aiLine, tier, audioPending = true)
-                    speakLine(aiLine, personality)
-                } else if (aiLine == null && genAt == lineGeneration.get()) {
-                    // LLM failed — keep canned, maybe speak it
-                    speakLine(canned, personality)
+                if (genAt == lineGeneration.get()) {
+                    when (result) {
+                        is LlmClient.Result.Ok -> {
+                            overlay.showLine(result.line, tier, audioPending = true)
+                            speakLine(result.line, persona)
+                        }
+                        is LlmClient.Result.Fail -> {
+                            // LLM failed — keep the canned line up, log the REAL reason
+                            android.util.Log.w(TAG, "LLM line failed: ${result.reason}")
+                            speakLine(canned, persona)
+                        }
+                    }
                 }
             }
         } else {
-            speakLine(canned, personality)
+            speakLine(canned, persona)
         }
     }
 
-    private fun speakLine(text: String, personality: com.kaiser.chordy.data.Personality) {
-        val voiceId = settings.voiceIdFor(personality)
+    private fun speakLine(text: String, persona: com.kaiser.chordy.data.Persona) {
+        val voiceId = settings.voiceIdFor(persona.id)
         if (voiceId.isBlank()) {
             overlay.onAudioReady()   // no voice configured — clear the dots
             return
@@ -234,6 +246,7 @@ class PowerMonitorService : Service() {
     companion object {
         private const val CHANNEL_ID = "chordy_monitor"
         private const val NOTIF_ID = 42
+        private const val TAG = "PowerMonitorService"
 
         /** APP_OPENED cooldown — named, not magic. 5 minutes by default. */
         const val APP_OPEN_COOLDOWN_MS: Long = 5 * 60 * 1000L

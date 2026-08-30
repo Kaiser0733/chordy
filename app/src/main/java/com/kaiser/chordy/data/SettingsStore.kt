@@ -60,15 +60,20 @@ class SettingsStore(context: Context) {
         get() = plain.getLong(KEY_CONNECT_TS, 0L)
         set(value) = plain.edit().putLong(KEY_CONNECT_TS, value).apply()
 
-    var selectedPersonality: Personality
-        get() = Personality.fromName(plain.getString(KEY_PERSONALITY, null))
-        set(value) = plain.edit().putString(KEY_PERSONALITY, value.name).apply()
+    /** Selected persona id (PersonaStore world) — falls back to Clingy. */
+    var selectedPersonaId: String
+        get() = plain.getString(KEY_PERSONA_ID, PersonaStore.ID_CLINGY) ?: PersonaStore.ID_CLINGY
+        set(value) = plain.edit().putString(KEY_PERSONA_ID, value).apply()
 
     // ---------- switches ----------
 
-    /** true = use LLM lines (with canned fallback); false = canned only, zero cost. */
+    /**
+     * AI lines are ON by default now — the app ships with a bundled endpoint,
+     * so the default experience is the LLM personas. Canned lines are the
+     * emergency fallback, not the main act.
+     */
     var aiLinesEnabled: Boolean
-        get() = plain.getBoolean(KEY_AI_LINES, false)
+        get() = plain.getBoolean(KEY_AI_LINES, true)
         set(value) = plain.edit().putBoolean(KEY_AI_LINES, value).apply()
 
     /** React to device unlock. Default ON. */
@@ -96,18 +101,19 @@ class SettingsStore(context: Context) {
         get() = plain.getBoolean(KEY_MONITORING_ENABLED, true)
         set(value) = plain.edit().putBoolean(KEY_MONITORING_ENABLED, value).apply()
 
-    // ---------- LLM config ----------
+    // ---------- LLM config (bundled NIM defaults, user-overridable) ----------
 
     var llmApiKey: String
         get() = secure.getString(KEY_LLM_KEY, "") ?: ""
         set(value) = secure.edit().putString(KEY_LLM_KEY, value).apply()
 
+    /** User base URL — blank means "use the bundled NIM endpoint". */
     var llmBaseUrl: String
-        get() = plain.getString(KEY_LLM_URL, "") ?: ""   // base URL isn't a secret
+        get() = plain.getString(KEY_LLM_URL, "") ?: ""
         set(value) = plain.edit().putString(KEY_LLM_URL, value).apply()
 
     var llmModel: String
-        get() = plain.getString(KEY_LLM_MODEL, "gpt-4o-mini") ?: "gpt-4o-mini"
+        get() = plain.getString(KEY_LLM_MODEL, "") ?: ""   // blank = bundled model
         set(value) = plain.edit().putString(KEY_LLM_MODEL, value).apply()
 
     // ---------- TTS config ----------
@@ -120,16 +126,16 @@ class SettingsStore(context: Context) {
         get() = plain.getString(KEY_TTS_URL, "") ?: ""
         set(value) = plain.edit().putString(KEY_TTS_URL, value).apply()
 
-    /** Voice ID per personality; empty string = no audio for that personality. */
-    fun voiceIdFor(p: Personality): String =
-        plain.getString(KEY_VOICE_PREFIX + p.name, "") ?: ""
+    /** Voice ID per persona id; empty string = no audio for that persona. */
+    fun voiceIdFor(personaId: String): String =
+        plain.getString(KEY_VOICE_PREFIX + personaId, "") ?: ""
 
-    fun setVoiceId(p: Personality, id: String) {
-        plain.edit().putString(KEY_VOICE_PREFIX + p.name, id).apply()
+    fun setVoiceId(personaId: String, id: String) {
+        plain.edit().putString(KEY_VOICE_PREFIX + personaId, id).apply()
     }
 
-    fun allVoiceIds(): Map<Personality, String> =
-        Personality.entries.associateWith { voiceIdFor(it) }
+    fun allVoiceIds(personaIds: List<String>): Map<String, String> =
+        personaIds.associateWith { voiceIdFor(it) }
 
     // ---------- misc ----------
 
@@ -146,6 +152,7 @@ class SettingsStore(context: Context) {
         const val KEY_DISCONNECT_TS = "last_disconnect_ts"
         const val KEY_CONNECT_TS = "last_connect_ts"
         const val KEY_PERSONALITY = "selected_personality"
+        const val KEY_PERSONA_ID = "selected_persona_id"
         const val KEY_AI_LINES = "ai_lines_enabled"
         const val KEY_LLM_KEY = "llm_api_key"
         const val KEY_LLM_URL = "llm_base_url"

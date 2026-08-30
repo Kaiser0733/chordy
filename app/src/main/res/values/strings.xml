@@ -49,4 +49,19 @@
     <string name="tts_test_ok">played — did you hear it?</string>
     <string name="tts_test_fail">synthesis failed — check key, URL, and voice ID</string>
     <string name="test_no_voice">set a voice ID for this personality first</string>
+    <string name="btn_new_persona">+ new</string>
+    <string name="btn_edit">edit</string>
+    <string name="btn_save">save</string>
+    <string name="btn_cancel">cancel</string>
+    <string name="btn_show_advanced">advanced settings</string>
+    <string name="btn_hide_advanced">hide advanced</string>
+    <string name="persona_new_title">new persona</string>
+    <string name="persona_edit_title">edit persona</string>
+    <string name="persona_name_label">name</string>
+    <string name="persona_tag_label">voice style (e.g. soft/anxious, sassy, theatrical)</string>
+    <string name="persona_prompt_label">system prompt — how the AI should act</string>
+    <string name="llm_bundled_hint">uses the built-in endpoint by default — test below, override if you want your own</string>
+    <string name="llm_override_hint">your own API (optional — leave blank for built-in)</string>
+    <string name="llm_test_fail_prefix">failed: %1$s</string>
+    <string name="ai_lines_toggle">AI-generated lines</string>
 </resources>

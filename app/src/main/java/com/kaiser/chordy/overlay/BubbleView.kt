@@ -1,5 +1,6 @@
 package com.kaiser.chordy.overlay
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -7,6 +8,8 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import com.kaiser.chordy.data.MoodTier
 
 /**
@@ -23,6 +26,56 @@ class BubbleView(context: Context) : View(context) {
             blinkUntil = 0L   // reset blink so a mood change always reads instantly
             invalidate()
         }
+
+    // ---------- idle breathing ----------
+    // A slow scale pulse so Chordy feels alive while sitting on screen.
+    // One animator, ~2.6s cycle, running ONLY while attached; cancels on detach.
+    // No 60fps-forever loop — the animator pauses itself between pulses.
+    private var breathAnimator: ValueAnimator? = null
+
+    private fun startBreathing() {
+        if (breathAnimator != null) return
+        breathAnimator = ValueAnimator.ofFloat(1f, 1.06f, 1f).apply {
+            duration = 2600
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { anim ->
+                breathScale = anim.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    private fun stopBreathing() {
+        breathAnimator?.cancel()
+        breathAnimator = null
+        breathScale = 1f
+    }
+
+    private var breathScale = 1f
+
+    // ---------- reaction pop ----------
+    // Quick squash-pop when a line lands — a physical "he noticed!" beat.
+    private var popAnimator: ValueAnimator? = null
+
+    fun pop() {
+        post {
+            popAnimator?.cancel()
+            popAnimator = ValueAnimator.ofFloat(1f, 1.25f, 0.92f, 1f).apply {
+                duration = 450
+                interpolator = OvershootInterpolator(2.2f)
+                addUpdateListener { anim ->
+                    popScale = anim.animatedValue as Float
+                    invalidate()
+                }
+                start()
+            }
+        }
+    }
+
+    private var popScale = 1f
 
     private val bodyColor = Color.parseColor("#7FD4A8")
     private val inkColor = Color.parseColor("#101014")
@@ -56,6 +109,13 @@ class BubbleView(context: Context) : View(context) {
             nextBlinkAt = now + 3200 + (Math.random() * 2200).toLong()
         }
         val blinking = now < blinkUntil
+
+        // Combined scale: idle breath x reaction pop, drawn around center.
+        val scale = breathScale * popScale
+        if (scale != 1f) {
+            canvas.save()
+            canvas.scale(scale, scale, cx, cy)
+        }
 
         // Body — the whole circle IS Chordy, no separate bubble sprite.
         canvas.drawCircle(cx, cy, r, bodyPaint)
@@ -101,12 +161,21 @@ class BubbleView(context: Context) : View(context) {
                 canvas.drawArc(rect, 180f, 180f, true, sadPaint)  // half-disc, open end up
             }
         }
+
+        if (scale != 1f) canvas.restore()
     }
 
-    // No per-frame animation loop by design: redraws fire only on mood change or
-    // drag. An always-on-screen overlay repainting at 60fps forever would be the
-    // exact churn the brief forbids. Chordy blinks when he's redrawn — he's
-    // low-maintenance, like any good housemate.
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        startBreathing()
+    }
+
+    override fun onDetachedFromWindow() {
+        stopBreathing()
+        popAnimator?.cancel()
+        popAnimator = null
+        super.onDetachedFromWindow()
+    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // OverlayManager attaches a touch listener externally for dragging;
