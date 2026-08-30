@@ -42,19 +42,21 @@ class UpdateChecker(private val context: Context) {
         "https://github.com/Kaiser0733/chordy/releases/download/latest/update-info.json"
 
     /** null = up to date (or check failed — never block the UI on this). */
-    fun checkForUpdate(): UpdateInfo? = try {
-        val response = http.newCall(
-            Request.Builder().url(manifestUrl).build()
-        ).execute()
-        if (!response.isSuccessful) return null
-        val info = json.decodeFromString(
-            UpdateInfo.serializer(),
-            response.body?.string() ?: return null
-        )
-        // Newer build published? (versionCode is the single source of truth)
-        if (info.versionCode > BuildConfig.VERSION_CODE) info else null
-    } catch (e: Exception) {
-        null
+    fun checkForUpdate(): UpdateInfo? {
+        return try {
+            val response = http.newCall(
+                Request.Builder().url(manifestUrl).build()
+            ).execute()
+            if (!response.isSuccessful) return null
+            val info = json.decodeFromString(
+                UpdateInfo.serializer(),
+                response.body?.string() ?: return null
+            )
+            // Newer build published? (versionCode is the single source of truth)
+            if (info.versionCode > BuildConfig.VERSION_CODE) info else null
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
@@ -62,33 +64,35 @@ class UpdateChecker(private val context: Context) {
      * Returns true if the install intent fired; false on download failure.
      * Long-running: call from Dispatchers.IO.
      */
-    fun downloadAndInstall(onProgress: (Int) -> Unit): Boolean = try {
-        val info = checkForUpdate() ?: return false
-        val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-        val apk = File(dir, "chordy-update.apk")
-        if (apk.exists()) apk.delete()
+    fun downloadAndInstall(onProgress: (Int) -> Unit): Boolean {
+        return try {
+            val info = checkForUpdate() ?: return false
+            val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val apk = File(dir, "chordy-update.apk")
+            if (apk.exists()) apk.delete()
 
-        val response = http.newCall(Request.Builder().url(info.apkUrl).build()).execute()
-        if (!response.isSuccessful) return false
-        val body = response.body ?: return false
-        val total = body.contentLength()
-        apk.outputStream().use { out ->
-            body.byteStream().use { input ->
-                val buf = ByteArray(16 * 1024)
-                var copied = 0L
-                while (true) {
-                    val read = input.read(buf)
-                    if (read == -1) break
-                    out.write(buf, 0, read)
-                    copied += read
-                    if (total > 0) onProgress(((copied * 100) / total).toInt())
+            val response = http.newCall(Request.Builder().url(info.apkUrl).build()).execute()
+            if (!response.isSuccessful) return false
+            val body = response.body ?: return false
+            val total = body.contentLength()
+            apk.outputStream().use { out ->
+                body.byteStream().use { input ->
+                    val buf = ByteArray(16 * 1024)
+                    var copied = 0L
+                    while (true) {
+                        val read = input.read(buf)
+                        if (read == -1) break
+                        out.write(buf, 0, read)
+                        copied += read
+                        if (total > 0) onProgress(((copied * 100) / total).toInt())
+                    }
                 }
             }
+            launchInstaller(apk)
+            true
+        } catch (e: Exception) {
+            false
         }
-        launchInstaller(apk)
-        true
-    } catch (e: Exception) {
-        false
     }
 
     private fun launchInstaller(apk: File) {
