@@ -135,6 +135,90 @@ fun SettingsScreen(
             Text(stringResource(if (monitoringOn) R.string.btn_pause else R.string.btn_resume))
         }
 
+        // ============ version + manual update check ============
+        // Up-to-date users saw NOTHING before — no version, no way to check.
+        // Now: version always visible, manual check always available.
+        var manualCheckState by remember { mutableStateOf<String?>(null) }
+        var manualChecking by remember { mutableStateOf(false) }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                stringResource(R.string.version_line, BuildConfig.VERSION_NAME),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = {
+                    manualChecking = true
+                    manualCheckState = null
+                    scope.launch(Dispatchers.IO) {
+                        val result = updateChecker.checkForUpdateDetailed()
+                        withContext(Dispatchers.Main) {
+                            manualChecking = false
+                            when (result) {
+                                is UpdateChecker.CheckResult.Update -> {
+                                    updateInfo = result.info
+                                    manualCheckState = null
+                                }
+                                is UpdateChecker.CheckResult.UpToDate ->
+                                    manualCheckState = ctx.getString(R.string.update_up_to_date)
+                                is UpdateChecker.CheckResult.Failed ->
+                                    manualCheckState = ctx.getString(R.string.update_check_failed)
+                            }
+                        }
+                    }
+                },
+                enabled = !manualChecking
+            ) {
+                Text(stringResource(
+                    if (manualChecking) R.string.update_checking
+                    else R.string.btn_check_update
+                ))
+            }
+        }
+        manualCheckState?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // ============ accessibility surfaced on home (was buried in advanced) ============
+        // APP_OPENED reactions silently don't work without this permission —
+        // the #1 "opening app doesn't respond" cause. Surface it where the
+        // user actually looks.
+        var a11yTick by remember { mutableStateOf(0) }
+        val a11yGranted = remember(refreshTick + a11yTick) {
+            AppForegroundService.isChordyAccessibilityEnabled(ctx)
+        }
+        if (store.reactToAppOpens && !a11yGranted) {
+            Card(colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
+            )) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        stringResource(R.string.a11y_needed_title),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        stringResource(R.string.a11y_needed_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(onClick = {
+                        ctx.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        a11yTick++
+                    }) {
+                        Text(stringResource(R.string.accessibility_open_settings))
+                    }
+                }
+            }
+        }
+
         // ============ update banner (one tap — no uninstall/reinstall) ============
         if (updateInfo != null && !downloading) {
             Card(colors = CardDefaults.cardColors(

@@ -13,8 +13,8 @@ android {
         applicationId = "com.kaiser.chordy"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.4.0"
+        versionCode = 8
+        versionName = "0.4.1"
 
         // Bundled LLM config. Keys arrive via GitHub Actions secrets
         // (NVIDIA_NIM_KEY, GROQ_API_KEY) and land only in the built APK via

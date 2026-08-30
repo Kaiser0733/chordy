@@ -47,6 +47,7 @@ class OverlayManager(private val context: Context) {
         private const val LINE_VISIBLE_MS = 6_000L   // how long a line stays up
         private const val FADE_IN_MS = 350L          // bubble fade-in
         private const val FADE_OUT_MS = 700L         // bubble fade-out (the fix)
+        private const val THINKING_TIMEOUT_MS = 45_000L   // "…" never sticks forever
     }
 
     // drag bookkeeping
@@ -157,6 +158,7 @@ class OverlayManager(private val context: Context) {
 
     /** Quiet "thinking" bubble while the LLM writes the line. */
     fun showThinking() {
+        val gen = ++lineGeneration
         mainHandler.post {
             if (!added) return@post
             ensureSpeechViews()
@@ -174,6 +176,12 @@ class OverlayManager(private val context: Context) {
                     }
                 }
             }
+            // Safety net: if the LLM call dies (worker killed mid-flight,
+            // process crash) the "…" would sit forever. 45s cap clears it.
+            // A new showLine/showThinking bumps the generation and cancels this.
+            mainHandler.postDelayed({
+                if (lineGeneration == gen) hideSpeech()
+            }, THINKING_TIMEOUT_MS)
         }
     }
 

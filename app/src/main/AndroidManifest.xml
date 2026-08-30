@@ -11,6 +11,17 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- API 30+ package visibility: the HOME-category resolve in
+         AppForegroundService.isLauncher() needs launcher visibility.
+         (The default launcher is system-exempt anyway — this makes it explicit
+         and future-proof against OEM quirks.) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
+
     <application
         android:name=".ChordyApp"
         android:allowBackup="true"

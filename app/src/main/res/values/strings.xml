@@ -73,4 +73,11 @@
     <string name="update_hint">one tap installs over the old app — your permissions and personas stay</string>
     <string name="btn_update_now">update now</string>
     <string name="update_downloading">downloading… %1$d%%</string>
+    <string name="version_line">v%1$s</string>
+    <string name="btn_check_update">check for updates</string>
+    <string name="update_checking">checking…</string>
+    <string name="update_up_to_date">you're on the latest version</string>
+    <string name="update_check_failed">couldn't reach the update server — check connection</string>
+    <string name="a11y_needed_title">app-open reactions are off</string>
+    <string name="a11y_needed_hint">chordy needs the accessibility permission to notice when you open apps — enable Chordy presence watcher there. plug/unlock reactions work without it.</string>
 </resources>

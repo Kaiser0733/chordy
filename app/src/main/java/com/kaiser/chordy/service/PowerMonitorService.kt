@@ -49,6 +49,8 @@ class PowerMonitorService : Service() {
 
     private var lastEventAt = 0L
     private val debounceMs = 2_000L
+    private var powerRegistered = false
+    private var unlockRegistered = false
 
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -80,16 +82,24 @@ class PowerMonitorService : Service() {
         createChannel()
         startForeground(NOTIF_ID, buildNotification())
         isRunning = true
-        registerReceiver(
-            powerReceiver,
-            IntentFilter().apply {
-                addAction(Intent.ACTION_POWER_CONNECTED)
-                addAction(Intent.ACTION_POWER_DISCONNECTED)
-            }
-        )
+        // Registration order matters for onDestroy symmetry: track what
+        // actually registered, so a throw midway can't make unregister crash.
+        runCatching {
+            registerReceiver(
+                powerReceiver,
+                IntentFilter().apply {
+                    addAction(Intent.ACTION_POWER_CONNECTED)
+                    addAction(Intent.ACTION_POWER_DISCONNECTED)
+                }
+            )
+            powerRegistered = true
+        }
         // ACTION_USER_PRESENT is delivery-to-registered-receivers-only on
         // Android 8+, so this one lives purely at runtime (per spec).
-        registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
+        runCatching {
+            registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
+            unlockRegistered = true
+        }
         // restore the face for this boot session
         overlay.show(MoodTier.fromReconnectCount(settings.reconnectCount))
     }
@@ -97,9 +107,18 @@ class PowerMonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // AppForegroundService forwards APP_OPENED through startForegroundService
         // with this action + package extra; power/unlock paths never carry it.
+        //
+        // STALE-REPLAY GUARD: on START_STICKY restarts after an OEM kill, the
+        // system can REDELIVER the last delivered intent — which would make
+        // Chordy re-react to an app opened before the kill. Drop any APP_OPENED
+        // older than 30s; fresh ones (direct accessibility-service handoff)
+        // always pass.
         if (intent?.action == AppForegroundService.ACTION_APP_OPENED) {
-            val pkg = intent.getStringExtra(AppForegroundService.EXTRA_PACKAGE)
-            onAppOpened(pkg)
+            val sentAt = intent.getLongExtra(AppForegroundService.EXTRA_SENT_AT, 0L)
+            if (sentAt > 0 && System.currentTimeMillis() - sentAt <= STALE_INTENT_MS) {
+                val pkg = intent.getStringExtra(AppForegroundService.EXTRA_PACKAGE)
+                onAppOpened(pkg)
+            }
         }
         // Battery optimization exemption is requested by MainActivity on first run;
         // this service just lives forever once started (START_STICKY on OEM kills).
@@ -110,8 +129,10 @@ class PowerMonitorService : Service() {
 
     override fun onDestroy() {
         isRunning = false
-        unregisterReceiver(powerReceiver)
-        unregisterReceiver(unlockReceiver)
+        // Unregister only what registered — a failed register midway through
+        // onCreate used to make this throw (crash on destroy = zombie service).
+        if (powerRegistered) runCatching { unregisterReceiver(powerReceiver) }
+        if (unlockRegistered) runCatching { unregisterReceiver(unlockReceiver) }
         overlay.hide()
         audio.stop()
         worker.shutdownNow()
@@ -248,6 +269,9 @@ class PowerMonitorService : Service() {
         private const val CHANNEL_ID = "chordy_monitor"
         private const val NOTIF_ID = 42
         private const val TAG = "PowerMonitorService"
+
+        /** APP_OPENED intents older than this are stale redeliveries — dropped. */
+        private const val STALE_INTENT_MS = 30_000L
 
         /** APP_OPENED cooldown — named, not magic. 5 minutes by default. */
         const val APP_OPEN_COOLDOWN_MS: Long = 5 * 60 * 1000L

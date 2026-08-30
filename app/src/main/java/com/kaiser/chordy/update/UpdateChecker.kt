@@ -59,6 +59,31 @@ class UpdateChecker(private val context: Context) {
         }
     }
 
+    /** Explicit outcome for the manual check button — no silent failure. */
+    sealed class CheckResult {
+        data class Update(val info: UpdateInfo) : CheckResult()
+        data object UpToDate : CheckResult()
+        data object Failed : CheckResult()
+    }
+
+    /** Manual check: tells the user WHAT happened, unlike the silent auto-check. */
+    fun checkForUpdateDetailed(): CheckResult {
+        return try {
+            val response = http.newCall(
+                Request.Builder().url(manifestUrl).build()
+            ).execute()
+            if (!response.isSuccessful) return CheckResult.Failed
+            val info = json.decodeFromString(
+                UpdateInfo.serializer(),
+                response.body?.string() ?: return CheckResult.Failed
+            )
+            if (info.versionCode > BuildConfig.VERSION_CODE) CheckResult.Update(info)
+            else CheckResult.UpToDate
+        } catch (e: Exception) {
+            CheckResult.Failed
+        }
+    }
+
     /**
      * Download the APK into the cache dir and hand it to the system installer.
      * Returns true if the install intent fired; false on download failure.
