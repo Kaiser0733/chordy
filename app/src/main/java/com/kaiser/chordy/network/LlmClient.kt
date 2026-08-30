@@ -87,7 +87,6 @@ class LlmClient {
             // One retry for transient trouble (timeouts, 429 shared-pool, 5xx).
             // Auth/config errors (401/403/404) fail fast — retrying those is noise.
             if (!response.isSuccessful && response.code() in RETRYABLE_CODES) {
-                response.close()
                 response = api.chat(endpoint, authHeader(apiKey), request).execute()
             }
             if (!response.isSuccessful) {
