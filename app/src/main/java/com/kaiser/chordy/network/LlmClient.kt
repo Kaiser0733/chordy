@@ -32,10 +32,11 @@ class LlmClient {
 
     val okHttp: OkHttpClient = OkHttpClient.Builder()
         // Measured NIM latency: median ~5s, spikes past 6s, plus mobile-network
-        // overhead — 8s was a coin flip. 30s read + one in-client retry (below)
-        // absorbs both slow generations and transient 429s from the shared pool.
+        // overhead. User-supplied REASONING models legitimately spend 20-40s+
+        // thinking before the line — 30s cut them off mid-thought. 60s + one
+        // in-client retry (below) absorbs all of it.
         .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
         .build()
 
@@ -70,7 +71,9 @@ class LlmClient {
         val endpoint = normalizeEndpoint(baseUrl)
         val request = ChatRequest(
             model = model,
-            max_tokens = 300,   // reasoning models spend budget thinking first
+            // 1000 tokens: reasoning models burn most of this on hidden/inline
+            // thinking before the actual line. 300 starved them into empty content.
+            max_tokens = 1000,
             temperature = 0.9f,
             messages = listOf(
                 Message(role = "system", content = personaPrompt),
@@ -93,36 +96,60 @@ class LlmClient {
                 val errBody = response.errorBody()?.string()?.take(200) ?: "no body"
                 return Result.Fail("HTTP ${response.code()}: $errBody")
             }
-            val content = response.body()?.choices?.firstOrNull()?.message?.content
-            if (content.isNullOrBlank()) {
-                Result.Fail("model returned no content (try a larger max_tokens or another model)")
-            } else {
-                Result.Ok(content.trim())
-            }
+            extractSpokenLine(response.body()?.choices?.firstOrNull()?.message)
         } catch (e: Exception) {
-            // IOException covers SocketTimeoutException — the "failed. timeout"
-            // report. Retry once, then report the real reason.
+            // IOException covers SocketTimeoutException. Retry once, report real reason.
             val reason = when (e) {
                 is java.io.IOException -> "network timeout — the API is slow or unreachable"
                 else -> e.message?.take(120) ?: "network error"
             }
-            val retryResult = try {
+            try {
                 val response = api.chat(endpoint, authHeader(apiKey), request).execute()
                 if (!response.isSuccessful) {
                     val errBody = response.errorBody()?.string()?.take(200) ?: "no body"
                     Result.Fail("HTTP ${response.code()}: $errBody")
                 } else {
-                    val content = response.body()?.choices?.firstOrNull()?.message?.content
-                    if (content.isNullOrBlank()) {
-                        Result.Fail("model returned no content (try a larger max_tokens or another model)")
-                    } else {
-                        Result.Ok(content.trim())
-                    }
+                    extractSpokenLine(response.body()?.choices?.firstOrNull()?.message)
                 }
             } catch (e2: Exception) {
                 Result.Fail("$reason (retried once, still failing)")
             }
-            retryResult
+        }
+    }
+
+    /**
+     * Pull the SPOKEN line out of a chat message, thinking stripped.
+     *
+     * Reasoning models (user-supplied: DeepSeek-R1 style, Qwen3, GLM, etc.)
+     * inline their chain
+     * (or <thinking>, or an UNTERMINATED block when the token cap hits mid-thought).
+     * Showing that raw made Chordy narrate his thoughts instead of speaking.
+     *
+     * Separate reasoning fields (reasoning / reasoning_content) are simply
+     * ignored — content is the speech, everything else is internals.
+     */
+    private fun extractSpokenLine(message: Message?): Result {
+        val content = message?.content
+        if (content.isNullOrBlank()) {
+            return Result.Fail(
+                "model returned no content — if it's a reasoning model, its thinking may have eaten the whole token budget (try a higher max_tokens or a non-reasoning model)"
+            )
+        }
+        var line = content
+        // terminated think blocks, both spellings, multiline
+        line = line.replace(
+            Regex("<think(?:ing)?>[\\s\\S]*?</think(?:ing)?>", RegexOption.IGNORE_CASE),
+            ""
+        ).trim()
+        // unterminated think block: everything after the opening tag is thinking
+        val openTag = Regex("<think(?:ing)?>", RegexOption.IGNORE_CASE).find(line)
+        if (openTag != null) {
+            line = line.substring(0, openTag.range.first).trim()
+        }
+        return if (line.isBlank()) {
+            Result.Fail("model only returned thinking, no line — try a non-reasoning model or raise max_tokens")
+        } else {
+            Result.Ok(line)
         }
     }
 
@@ -159,7 +186,15 @@ data class ChatRequest(
 )
 
 @Serializable
-data class Message(val role: String, val content: String)
+data class Message(
+    val role: String,
+    val content: String? = null,
+    // Reasoning-model fields — deliberately NOT displayed anywhere. DeepSeek-style
+    // APIs use reasoning_content; NIM/others use reasoning. Thinking never
+    // reaches the bubble; extractSpokenLine only trusts `content`.
+    val reasoning: String? = null,
+    @SerialName("reasoning_content") val reasoningContent: String? = null
+)
 
 @Serializable
 data class ChatResponse(val choices: List<Choice> = emptyList())
